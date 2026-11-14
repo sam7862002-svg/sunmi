@@ -27,7 +27,8 @@ public class MainActivity extends AppCompatActivity {
     private WebView webView;
     private SunmiPrinterService sunmiPrinterService;
 
-    private static final String POS_URL = "https://sam7862002-svg.github.io/sunmi.html";
+    // നിങ്ങളുടെ ശരിയായ GitHub Pages URL
+    private static final String POS_URL = "https://sam7862002-svg.github.io/bagala/sunmi.html";
 
     private final InnerPrinterCallback innerPrinterCallback = new InnerPrinterCallback() {
         @Override
