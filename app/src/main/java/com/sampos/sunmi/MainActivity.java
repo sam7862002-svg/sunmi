@@ -1,21 +1,25 @@
 package com.sampos.sunmi;
 
-import android.Manifest;
 import android.annotation.SuppressLint;
-import android.content.pm.PackageManager;
+import android.graphics.Color;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.RemoteException;
+import android.view.Gravity;
+import android.view.View;
 import android.webkit.JavascriptInterface;
-import android.webkit.PermissionRequest;
+import android.webkit.RenderProcessGoneDetail;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.Button;
+import android.widget.FrameLayout;
+import android.widget.LinearLayout;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.app.ActivityCompat;
-import androidx.core.content.ContextCompat;
 
 import com.sunmi.peripheral.printer.InnerPrinterCallback;
 import com.sunmi.peripheral.printer.InnerPrinterManager;
@@ -28,6 +32,9 @@ import java.nio.charset.StandardCharsets;
 
 public class MainActivity extends AppCompatActivity {
 
+    private FrameLayout rootLayout;
+    private LinearLayout menuLayout;
+    private TextView statusTxt;
     private WebView webView;
     private SunmiPrinterService sunmiPrinterService;
 
@@ -35,7 +42,9 @@ public class MainActivity extends AppCompatActivity {
         @Override
         protected void onConnected(SunmiPrinterService service) {
             sunmiPrinterService = service;
-            runOnUiThread(() -> Toast.makeText(MainActivity.this, "SUNMI Printer Connected!", Toast.LENGTH_SHORT).show());
+            runOnUiThread(() -> {
+                if (statusTxt != null) statusTxt.setText("✅ SUNMI Printer Connected!");
+            });
         }
 
         @Override
@@ -44,47 +53,90 @@ public class MainActivity extends AppCompatActivity {
         }
     };
 
-    @SuppressLint("SetJavaScriptEnabled")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        try {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-                ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.CAMERA}, 101);
-            }
-        } catch (Throwable ignored) {}
+        rootLayout = new FrameLayout(this);
+        rootLayout.setBackgroundColor(Color.parseColor("#0f172a"));
+
+        menuLayout = new LinearLayout(this);
+        menuLayout.setOrientation(LinearLayout.VERTICAL);
+        menuLayout.setGravity(Gravity.CENTER);
+        menuLayout.setPadding(40, 40, 40, 40);
+
+        TextView title = new TextView(this);
+        title.setText("SAMPOS SUNMI V2s");
+        title.setTextColor(Color.parseColor("#38bdf8"));
+        title.setTextSize(22);
+        title.setGravity(Gravity.CENTER);
+        menuLayout.addView(title);
+
+        statusTxt = new TextView(this);
+        statusTxt.setText("Connecting Printer...");
+        statusTxt.setTextColor(Color.WHITE);
+        statusTxt.setTextSize(15);
+        statusTxt.setGravity(Gravity.CENTER);
+        statusTxt.setPadding(0, 20, 0, 40);
+        menuLayout.addView(statusTxt);
+
+        Button btnOpenPos = new Button(this);
+        btnOpenPos.setText("🚀 OPEN POS SCREEN");
+        btnOpenPos.setOnClickListener(v -> launchWebViewSafely());
+        menuLayout.addView(btnOpenPos);
+
+        Button btnTestPrint = new Button(this);
+        btnTestPrint.setText("🖨️ TEST SHELF TAG PRINT");
+        btnTestPrint.setOnClickListener(v -> {
+            new SunmiJsBridge().printShelfTag("SAMPLE ITEM 500G", "15.00 SAR", "628100123456", "ITM-01");
+        });
+        menuLayout.addView(btnTestPrint);
+
+        rootLayout.addView(menuLayout);
+        setContentView(rootLayout);
 
         try {
             InnerPrinterManager.getInstance().bindService(this, innerPrinterCallback);
-        } catch (Throwable ignored) {}
+        } catch (Throwable t) {
+            statusTxt.setText("Printer Error: " + t.getMessage());
+        }
+    }
 
-        webView = new WebView(this);
-        setContentView(webView);
+    @SuppressLint("SetJavaScriptEnabled")
+    private void launchWebViewSafely() {
+        try {
+            statusTxt.setText("Loading POS...");
+            webView = new WebView(this);
+            WebSettings settings = webView.getSettings();
+            settings.setJavaScriptEnabled(true);
+            settings.setDomStorageEnabled(true);
+            settings.setDatabaseEnabled(true);
+            settings.setAllowFileAccess(true);
+            settings.setMediaPlaybackRequiresUserGesture(false);
 
-        WebSettings settings = webView.getSettings();
-        settings.setJavaScriptEnabled(true);
-        settings.setDomStorageEnabled(true);
-        settings.setDatabaseEnabled(true);
-        settings.setAllowFileAccess(true);
-        settings.setMediaPlaybackRequiresUserGesture(false);
-        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+            webView.addJavascriptInterface(new SunmiJsBridge(), "sunmiPrinter");
+            webView.setWebViewClient(new WebViewClient() {
+                @Override
+                public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
+                    runOnUiThread(() -> {
+                        rootLayout.removeView(webView);
+                        webView = null;
+                        menuLayout.setVisibility(View.VISIBLE);
+                        statusTxt.setText("❌ Android 7.1 WebView Crashed! Use Chrome Mode.");
+                    });
+                    return true;
+                }
+            });
+            webView.setWebChromeClient(new WebChromeClient());
 
-        webView.addJavascriptInterface(new SunmiJsBridge(), "sunmiPrinter");
-        webView.setWebViewClient(new WebViewClient());
-        webView.setWebChromeClient(new WebChromeClient() {
-            @Override
-            public void onPermissionRequest(final PermissionRequest request) {
-                runOnUiThread(() -> {
-                    try {
-                        request.grant(request.getResources());
-                    } catch (Throwable ignored) {}
-                });
-            }
-        });
-
-        String html = readAssetHtml("sunmi.html");
-        webView.loadDataWithBaseURL("http://localhost/", html, "text/html", "UTF-8", null);
+            String html = readAssetHtml("sunmi.html");
+            menuLayout.setVisibility(View.GONE);
+            rootLayout.addView(webView);
+            webView.loadDataWithBaseURL("http://localhost/", html, "text/html", "UTF-8", null);
+        } catch (Throwable e) {
+            menuLayout.setVisibility(View.VISIBLE);
+            statusTxt.setText("Error: " + e.getMessage());
+        }
     }
 
     private String readAssetHtml(String fileName) {
@@ -96,7 +148,7 @@ public class MainActivity extends AppCompatActivity {
                 sb.append(line).append('\n');
             }
         } catch (Exception e) {
-            return "<html><body style='background:#0f172a;color:#fff;padding:20px;'><h3>Asset Load Error</h3><p>" + e.getMessage() + "</p></body></html>";
+            return "<html><body><h3>Asset Error: " + e.getMessage() + "</h3></body></html>";
         }
         return sb.toString();
     }
@@ -128,34 +180,21 @@ public class MainActivity extends AppCompatActivity {
             try {
                 sunmiPrinterService.printerInit(null);
                 sunmiPrinterService.setAlignment(1, null);
-
-                // 1. Top border
                 sunmiPrinterService.setFontSize(20, null);
                 sunmiPrinterService.printText("================================\n", null);
-
-                // 2. Item Name
                 sunmiPrinterService.setFontSize(24, null);
                 sunmiPrinterService.printText(itemName + "\n", null);
-
-                // 3. Price (Incl. VAT) in Large Font
                 sunmiPrinterService.setFontSize(38, null);
                 sunmiPrinterService.printText(priceWithVat + "\n", null);
-
                 sunmiPrinterService.setFontSize(18, null);
                 sunmiPrinterService.printText("(Incl. 15% VAT)\n", null);
-
-                // 4. Scannable Barcode (Code128 - symbology 8) + text below (textPosition 2)
                 if (barcodeData != null && !barcodeData.trim().isEmpty()) {
                     sunmiPrinterService.printBarCode(barcodeData.trim(), 8, 55, 2, 2, null);
                 }
-
-                // 5. Small item code like main POS
                 if (itemCode != null && !itemCode.trim().isEmpty()) {
                     sunmiPrinterService.setFontSize(18, null);
                     sunmiPrinterService.printText("Code: " + itemCode.trim() + "\n", null);
                 }
-
-                // 6. Bottom border & feed
                 sunmiPrinterService.setFontSize(20, null);
                 sunmiPrinterService.printText("================================\n", null);
                 sunmiPrinterService.lineWrap(4, null);
@@ -169,7 +208,6 @@ public class MainActivity extends AppCompatActivity {
             if (sunmiPrinterService == null || barcodeData == null || barcodeData.isEmpty()) return;
             try {
                 sunmiPrinterService.setAlignment(1, null);
-                // Symbology 8 = CODE128, textPosition 2 = below barcode
                 sunmiPrinterService.printBarCode(barcodeData.trim(), 8, height > 0 ? height : 60, width > 0 ? width : 2, 2, null);
                 sunmiPrinterService.lineWrap(3, null);
             } catch (RemoteException e) {
