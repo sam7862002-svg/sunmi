@@ -1,0 +1,936 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0f172a">
+  <title>SAMPOS SUNMI V2s POS</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: sans-serif; }
+    body { background-color: #0f172a; color: #f8fafc; padding: 8px; padding-bottom: 85px; }
+    .container { max-width: 540px; margin: 0 auto; }
+
+    .top-bar {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 8px; background: #1e293b; padding: 8px 10px;
+      border-radius: 10px; border: 1px solid #334155;
+    }
+    .top-bar h2 { font-size: 13.5px; font-weight: 800; color: #38bdf8; }
+    .top-btns { display: flex; gap: 4px; align-items: center; }
+    .btn-icon { background: #334155; color: #fff; border: 1px solid #475569; padding: 7px 9px; border-radius: 6px; font-size: 11px; font-weight: bold; cursor: pointer; }
+    .btn-recent { background: #8b5cf6; border-color: #a78bfa; }
+
+    .mode-selector { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-bottom: 8px; }
+    .mode-btn {
+      background: #1e293b; border: 1px solid #475569; color: #94a3b8;
+      padding: 9px 2px; border-radius: 8px; font-size: 11px; font-weight: 800;
+      cursor: pointer; text-align: center;
+    }
+    .mode-btn.active { background: #2563eb; color: #fff; border-color: #60a5fa; }
+
+    .submode-bar {
+      display: flex; gap: 6px; margin-bottom: 8px; background: #1e293b; padding: 5px; border-radius: 8px; border: 1px solid #334155;
+    }
+    .submode-btn {
+      flex: 1; padding: 7px; font-size: 11.5px; font-weight: 700; border-radius: 6px; border: none; cursor: pointer; background: transparent; color: #94a3b8;
+    }
+    .submode-btn.active { background: #0284c7; color: #fff; }
+    .submode-btn.return-active { background: #dc2626; color: #fff; }
+
+    .card {
+      background: #1e293b; border-radius: 10px; border: 1px solid #334155;
+      padding: 10px; margin-bottom: 8px;
+    }
+    .card-header { font-size: 12.5px; font-weight: 700; color: #38bdf8; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; }
+
+    .action-grid { display: grid; grid-template-columns: 1fr auto; gap: 6px; margin-bottom: 6px; position: relative; }
+    .search-input, .form-input {
+      width: 100%; background: #0f172a; border: 1.5px solid #38bdf8; color: #ffffff !important;
+      padding: 10px; border-radius: 8px; font-size: 14px; font-weight: bold;
+      -webkit-user-select: text; user-select: text;
+    }
+    .form-input { border-color: #475569; }
+    .btn-camera {
+      background: #059669; color: #fff; border: none; padding: 10px 12px;
+      border-radius: 8px; font-size: 12.5px; font-weight: bold; cursor: pointer;
+    }
+
+    .search-suggestions {
+      position: absolute; top: 100%; left: 0; right: 0; background: #0f172a;
+      border: 1px solid #38bdf8; border-radius: 8px; max-height: 220px;
+      overflow-y: auto; z-index: 500; display: none; box-shadow: 0 10px 25px rgba(0,0,0,0.8);
+    }
+    .suggestion-row {
+      padding: 10px; border-bottom: 1px solid #1e293b; cursor: pointer;
+      display: flex; justify-content: space-between; align-items: center; font-size: 12.5px;
+    }
+
+    #scannerWrapper {
+      display: none; position: relative; width: 100%; border-radius: 8px; overflow: hidden;
+      border: 2px solid #38bdf8; background: #000; margin-bottom: 8px;
+    }
+    #scannerVideo { width: 100%; height: 210px; object-fit: cover; display: block; }
+
+    #scanToast {
+      position: fixed; top: 55px; left: 50%; transform: translateX(-50%);
+      padding: 8px 16px; border-radius: 25px; font-weight: 800; font-size: 12.5px;
+      z-index: 9999; display: none; box-shadow: 0 6px 20px rgba(0,0,0,0.6); color: #fff;
+    }
+
+    .cart-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 4px; }
+    .cart-table th { background: #0f172a; color: #94a3b8; padding: 5px 3px; text-align: left; font-size: 10.5px; }
+    .cart-table td { padding: 7px 3px; border-bottom: 1px solid #334155; }
+    .cart-qty-input { width: 44px; background: #0f172a; border: 1px solid #475569; color: #fff; text-align: center; padding: 6px 2px; border-radius: 4px; font-weight: bold; font-size: 13px; }
+    .cart-price-input { width: 62px; background: #0f172a; border: 1px solid #475569; color: #f59e0b; text-align: right; padding: 6px 3px; border-radius: 4px; font-weight: bold; font-size: 13px; }
+    .btn-del { color: #ef4444; background: none; border: none; font-size: 18px; cursor: pointer; padding: 0 4px; }
+
+    .summary-box { background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 8px 10px; margin-top: 8px; }
+    .summary-row { display: flex; justify-content: space-between; margin-bottom: 3px; font-size: 12px; color: #94a3b8; }
+    .summary-row.total { font-size: 16px; font-weight: 900; color: #38bdf8; border-top: 1px solid #334155; padding-top: 5px; margin-top: 5px; }
+
+    .pay-methods { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin-top: 8px; }
+    .pay-btn {
+      padding: 10px 4px; font-size: 11.5px; font-weight: 800; border-radius: 6px; border: 1px solid #475569;
+      background: #0f172a; color: #94a3b8; cursor: pointer; text-align: center;
+    }
+    .pay-btn.active { background: #0284c7; color: #fff; border-color: #38bdf8; }
+
+    .checkout-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 10px; }
+    .btn-checkout {
+      border: none; padding: 13px 6px; border-radius: 8px; font-size: 12.5px; font-weight: 800; cursor: pointer; text-align: center;
+    }
+    .btn-sunmi { background: #f97316; color: #fff; grid-column: span 2; font-size: 14px; }
+    .btn-noprint { background: #475569; color: #fff; }
+    .btn-whatsapp { background: #25d366; color: #000; font-weight: 900; }
+    .btn-primary { width: 100%; background: #2563eb; color: #fff; border: none; padding: 12px; border-radius: 6px; font-size: 14px; font-weight: bold; cursor: pointer; }
+
+    .modal-overlay {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.85);
+      display: none; align-items: center; justify-content: center; z-index: 1000; padding: 10px;
+    }
+    .modal-card {
+      background: #1e293b; border: 1px solid #38bdf8; border-radius: 12px;
+      padding: 14px; width: 100%; max-width: 460px; max-height: 85vh; display: flex; flex-direction: column;
+    }
+    .modal-body { overflow-y: auto; flex: 1; }
+    .bill-item {
+      background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 9px;
+      margin-bottom: 7px; display: flex; justify-content: space-between; align-items: center;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="scanToast"></div>
+
+  <div class="container">
+    <div class="top-bar">
+      <h2>📟 SUNMI V2s POS</h2>
+      <div class="top-btns">
+        <button type="button" class="btn-icon btn-recent" onclick="openRecentBillsModal()">📜 Bills</button>
+        <button type="button" class="btn-icon" onclick="loadInitialData(true)">🔄 Sync</button>
+        <button type="button" class="btn-icon" onclick="openServerConfigModal()">⚙️</button>
+      </div>
+    </div>
+
+    <div class="mode-selector">
+      <button type="button" class="mode-btn active" id="modeSale" onclick="switchMainMode('sale')">⚡ Sale</button>
+      <button type="button" class="mode-btn" id="modePurchase" onclick="switchMainMode('purchase')">📦 Purchase</button>
+      <button type="button" class="mode-btn" id="modeStock" onclick="switchMainMode('stock')">📊 Stock</button>
+      <button type="button" class="mode-btn" onclick="testSunmiJsPrint()">🖨️ Test</button>
+    </div>
+
+    <div class="submode-bar" id="submodeBar">
+      <button type="button" class="submode-btn active" id="submodeNormal" onclick="setSubmode('normal')">✅ Normal</button>
+      <button type="button" class="submode-btn" id="submodeReturn" onclick="setSubmode('return')">🔄 Return / Refund</button>
+    </div>
+
+    <div class="card" id="partyCard">
+      <div class="card-header">
+        <span id="partyHeaderTitle">👤 Customer (കസ്റ്റമർ)</span>
+        <span id="partyBalDisplay" style="font-weight:900; color:#4ade80;">Due: 0.00</span>
+      </div>
+      <div style="position: relative;">
+        <input type="text" id="partySearchInput" class="form-input" placeholder="Type Customer Name or Phone..." autocomplete="off">
+        <div id="partySuggestions" class="search-suggestions"></div>
+      </div>
+      <div id="suppBillGroup" style="display:none; margin-top: 6px;">
+        <input type="text" id="inputSuppBillNo" class="form-input" placeholder="Supplier Invoice No *" autocomplete="off">
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <span>📷 Camera Barcode / Search</span>
+        <span id="serverStatusBadge" style="font-size:11px; color:#f59e0b;">⏳ Syncing...</span>
+      </div>
+      <div class="action-grid">
+        <div style="position: relative;">
+          <input type="text" id="itemSearchInput" class="search-input" placeholder="Type Item Name or Barcode..." autocomplete="off">
+          <div id="itemSuggestions" class="search-suggestions"></div>
+        </div>
+        <button type="button" class="btn-camera" onclick="toggleCameraScanner()" id="btnCamToggle">📷 Scan</button>
+      </div>
+
+      <div id="scannerWrapper">
+        <video id="scannerVideo" playsinline autoplay muted></video>
+      </div>
+
+      <div id="stockTakeBox" style="display:none; background:#0f172a; padding:10px; border-radius:8px; margin-top:6px;">
+        <div style="font-size:14px; font-weight:bold; color:#38bdf8;" id="stkItemName">Search or scan item to update stock</div>
+        <div style="font-size:12px; color:#94a3b8; margin-top:4px;">Current Stock: <b id="stkCurrentStock" style="color:#4ade80; font-size:15px;">0</b></div>
+        <div style="display:flex; gap:6px; margin-top:8px;">
+          <input type="number" id="inputPhysicalCount" class="form-input" style="font-size:16px; text-align:center;" placeholder="New Qty">
+          <button type="button" class="btn-primary" style="width:110px;" onclick="saveStockTake()">💾 Save</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" id="cartCard">
+      <div class="card-header">
+        <span>🛒 Items (<span id="cartCount">0</span>)</span>
+        <button type="button" onclick="clearCart()" style="background:none; border:none; color:#f87171; font-size:12px; font-weight:bold;">🗑️ Clear</button>
+      </div>
+
+      <table class="cart-table">
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th style="text-align:center;">Qty</th>
+            <th style="text-align:right;">Price</th>
+            <th style="text-align:right;">Total</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="cartTableBody">
+          <tr><td colspan="5" style="text-align:center; color:#64748b; padding:12px;">Search item or tap 📷 Scan</td></tr>
+        </tbody>
+      </table>
+
+      <div class="summary-box">
+        <div class="summary-row"><span>Subtotal (Excl. VAT):</span><span id="lblSubtotal">0.00 SAR</span></div>
+        <div class="summary-row"><span>VAT (15%):</span><span id="lblVat">0.00 SAR</span></div>
+        <div class="summary-row total"><span>NET TOTAL:</span><span id="lblNetTotal">0.00 SAR</span></div>
+      </div>
+
+      <div class="pay-methods">
+        <button type="button" class="pay-btn active" id="payBtnCash" onclick="setPaymentMethod('CASH')">💵 CASH</button>
+        <button type="button" class="pay-btn" id="payBtnCard" onclick="setPaymentMethod('BANK')">💳 CARD</button>
+        <button type="button" class="pay-btn" id="payBtnCredit" onclick="setPaymentMethod('CREDIT')">📑 CREDIT</button>
+      </div>
+
+      <div class="checkout-grid" id="checkoutSection">
+        <button type="button" class="btn-checkout btn-sunmi" onclick="executeCheckout('sunmi')">🖨️ Save & Print (SUNMI 58mm)</button>
+        <button type="button" class="btn-checkout btn-noprint" onclick="executeCheckout('noprint')">💾 Save Only</button>
+        <button type="button" class="btn-checkout btn-whatsapp" onclick="executeCheckout('whatsapp')">📲 WhatsApp</button>
+      </div>
+
+      <div id="purchaseActionSection" style="display:none; margin-top:10px;">
+        <button type="button" class="btn-primary" style="background:#059669; padding:13px;" id="btnSavePurchase" onclick="executePurchaseSave()">📦 Save Purchase</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent Bills Modal -->
+  <div class="modal-overlay" id="recentBillsModal">
+    <div class="modal-card">
+      <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
+        <h3 style="color:#a78bfa; font-size:14px;">📜 Recent Invoices</h3>
+        <button type="button" onclick="document.getElementById('recentBillsModal').style.display='none'" style="background:none; border:none; color:#fff; font-size:18px;">✖</button>
+      </div>
+      <div class="modal-body" id="recentBillsList"></div>
+    </div>
+  </div>
+
+  <!-- Settings Modal -->
+  <div class="modal-overlay" id="serverModal">
+    <div class="modal-card">
+      <h3 style="color:#38bdf8; margin-bottom:10px; font-size:15px;">⚙️ SUNMI Terminal & Plugin Port</h3>
+      <label style="font-size:11px; color:#94a3b8;">Terminal ID (e.g. S1):</label>
+      <input type="text" id="cfgTerminalId" class="form-input" style="margin-bottom:8px;">
+      <label style="font-size:11px; color:#94a3b8;">Sunmi Print Plugin Port (Default 8080):</label>
+      <input type="text" id="cfgPluginPort" class="form-input" style="margin-bottom:8px;" placeholder="8080">
+      <label style="font-size:11px; color:#94a3b8;">Supabase URL:</label>
+      <input type="text" id="cfgSbUrl" class="form-input" style="margin-bottom:8px;">
+      <label style="font-size:11px; color:#94a3b8;">Supabase Key:</label>
+      <input type="text" id="cfgSbKey" class="form-input" style="margin-bottom:10px;">
+      <button type="button" class="btn-primary" onclick="saveServerConfig()">💾 Save</button>
+      <button type="button" class="btn-icon" style="width:100%; margin-top:6px;" onclick="document.getElementById('serverModal').style.display='none'">Close</button>
+    </div>
+  </div>
+
+  <script>
+    var DEFAULT_SB_URL = 'https://kuaepkcztqwxufigxedh.supabase.co';
+    var DEFAULT_SB_KEY = 'sb_publishable_-a-0l-DRJFM9ml2FhnSAxw_7lP1WCOt';
+
+    var mainMode = 'sale';
+    var subMode = 'normal';
+    var selectedPayMethod = 'CASH';
+    var productsList = [];
+    var customersList = [];
+    var vendorsList = [];
+    var storeSettings = {};
+    var activeParty = null;
+    var cart = [];
+    var stockTargetItem = null;
+    var isSaving = false;
+
+    var videoStream = null;
+    var barcodeDetector = null;
+    var scanTimer = null;
+
+    function getCloudConfig() {
+      return {
+        sbUrl: localStorage.getItem('sampos_sb_url') || DEFAULT_SB_URL,
+        sbKey: DEFAULT_SB_KEY,
+        terminalId: localStorage.getItem('sunmi_terminal_id') || 'S1',
+        pluginPort: localStorage.getItem('sunmi_plugin_port') || '8080'
+      };
+    }
+
+    function sbFetch(path, options) {
+      options = options || {};
+      var cfg = getCloudConfig();
+      var headers = {
+        'apikey': cfg.sbKey,
+        'Authorization': 'Bearer ' + cfg.sbKey,
+        'Content-Type': 'application/json'
+      };
+      if (options.prefer) headers['Prefer'] = options.prefer;
+
+      return fetch(cfg.sbUrl + '/rest/v1/' + path, {
+        method: options.method || 'GET',
+        headers: headers,
+        body: options.body ? JSON.stringify(options.body) : undefined
+      }).then(function(res) {
+        if (!res.ok) {
+          return res.text().then(function(t) { throw new Error(t || ('HTTP ' + res.status)); });
+        }
+        return res.text().then(function(txt) {
+          return txt ? JSON.parse(txt) : null;
+        });
+      });
+    }
+
+    function showToastMsg(msg, isErr) {
+      var t = document.getElementById('scanToast');
+      t.style.background = isErr ? '#ef4444' : '#10b981';
+      t.innerText = msg;
+      t.style.display = 'block';
+      setTimeout(function() { t.style.display = 'none'; }, 1600);
+    }
+
+    function fetchAllProducts() {
+      var all = [];
+      function loadPage(offset) {
+        return sbFetch('products?select=*&order=id.asc&offset=' + offset + '&limit=1000').then(function(rows) {
+          if (rows && rows.length > 0) {
+            all = all.concat(rows);
+            if (rows.length === 1000) return loadPage(offset + 1000);
+          }
+          return all;
+        });
+      }
+      return loadPage(0);
+    }
+
+    function loadInitialData(showToast) {
+      var badge = document.getElementById('serverStatusBadge');
+      badge.innerHTML = '⏳ Syncing...';
+      badge.style.color = '#f59e0b';
+
+      Promise.all([
+        fetchAllProducts(),
+        sbFetch('parties?select=*&order=name_en.asc'),
+        sbFetch('settings?id=eq.1&select=*')
+      ]).then(function(results) {
+        productsList = results[0] || [];
+        var allParties = results[1] || [];
+        customersList = allParties.filter(function(p) {
+          var t = (p.type || '').toLowerCase();
+          return t !== 'vendor' && t !== 'supplier';
+        });
+        vendorsList = allParties.filter(function(p) {
+          var t = (p.type || '').toLowerCase();
+          return t === 'vendor' || t === 'supplier';
+        });
+        if (results[2] && results[2].length > 0) storeSettings = results[2][0];
+
+        badge.innerHTML = '🟢 Online (' + productsList.length + ')';
+        badge.style.color = '#4ade80';
+        if (showToast) showToastMsg('✅ ' + productsList.length + ' Items Synced');
+      }).catch(function(err) {
+        badge.innerHTML = '🔴 Error';
+        badge.style.color = '#f87171';
+        if (showToast) alert('Sync Error: ' + err.message);
+      });
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+      if ('BarcodeDetector' in window) {
+        try {
+          barcodeDetector = new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'code_128', 'code_39', 'upc_a', 'upc_e', 'qr_code'] });
+        } catch (e) {}
+      }
+
+      var partyInp = document.getElementById('partySearchInput');
+      partyInp.addEventListener('input', function() { handlePartySearch(this.value); });
+      partyInp.addEventListener('keyup', function() { handlePartySearch(this.value); });
+
+      var itemInp = document.getElementById('itemSearchInput');
+      itemInp.addEventListener('input', function() { handleItemSearch(this.value); });
+      itemInp.addEventListener('keyup', function(e) {
+        if (e.key === 'Enter' || e.keyCode === 13) {
+          handleItemEnter(this.value);
+        } else {
+          handleItemSearch(this.value);
+        }
+      });
+
+      loadInitialData(false);
+    });
+
+    function switchMainMode(mode) {
+      mainMode = mode;
+      document.querySelectorAll('.mode-btn').forEach(function(b) { b.classList.remove('active'); });
+      document.getElementById(mode === 'sale' ? 'modeSale' : mode === 'purchase' ? 'modePurchase' : 'modeStock').classList.add('active');
+
+      activeParty = null;
+      document.getElementById('partySearchInput').value = '';
+      document.getElementById('partyBalDisplay').innerText = 'Due: 0.00';
+
+      document.getElementById('submodeBar').style.display = mode === 'stock' ? 'none' : 'flex';
+      document.getElementById('partyCard').style.display = mode === 'stock' ? 'none' : 'block';
+      document.getElementById('cartCard').style.display = mode === 'stock' ? 'none' : 'block';
+      document.getElementById('stockTakeBox').style.display = mode === 'stock' ? 'block' : 'none';
+      document.getElementById('suppBillGroup').style.display = mode === 'purchase' ? 'block' : 'none';
+      document.getElementById('checkoutSection').style.display = mode === 'sale' ? 'grid' : 'none';
+      document.getElementById('purchaseActionSection').style.display = mode === 'purchase' ? 'block' : 'none';
+      document.getElementById('partyHeaderTitle').innerText = mode === 'purchase' ? '🚚 Supplier (സപ്ലയർ)' : '👤 Customer (കസ്റ്റമർ)';
+      setPaymentMethod(mode === 'purchase' ? 'CREDIT' : 'CASH');
+      setSubmode('normal');
+      clearCart();
+    }
+
+    function setSubmode(sub) {
+      subMode = sub;
+      document.getElementById('submodeNormal').className = 'submode-btn' + (sub === 'normal' ? ' active' : '');
+      document.getElementById('submodeReturn').className = 'submode-btn' + (sub === 'return' ? ' return-active' : '');
+      if (mainMode === 'purchase') {
+        document.getElementById('btnSavePurchase').innerText = sub === 'return' ? '🔄 Save Purchase Return' : '📦 Save Purchase';
+        document.getElementById('btnSavePurchase').style.background = sub === 'return' ? '#dc2626' : '#059669';
+      }
+    }
+
+    function setPaymentMethod(pm) {
+      selectedPayMethod = pm;
+      document.getElementById('payBtnCash').classList.toggle('active', pm === 'CASH');
+      document.getElementById('payBtnCard').classList.toggle('active', pm === 'BANK');
+      document.getElementById('payBtnCredit').classList.toggle('active', pm === 'CREDIT');
+    }
+
+    function handlePartySearch(query) {
+      var q = (query || '').trim().toUpperCase();
+      var dd = document.getElementById('partySuggestions');
+      if (!q) { dd.style.display = 'none'; activeParty = null; return; }
+      var list = mainMode === 'purchase' ? vendorsList : customersList;
+      var matches = list.filter(function(p) {
+        return (p.name_en || '').toUpperCase().indexOf(q) !== -1 || (p.phone && p.phone.indexOf(q) !== -1);
+      }).slice(0, 10);
+
+      dd.innerHTML = '';
+      matches.forEach(function(p) {
+        var div = document.createElement('div');
+        div.className = 'suggestion-row';
+        div.innerHTML = '<div><b>' + p.name_en + '</b></div><div style="color:#f59e0b;">' + (parseFloat(p.current_balance) || 0).toFixed(2) + '</div>';
+        div.onclick = function() {
+          activeParty = p;
+          document.getElementById('partySearchInput').value = p.name_en;
+          dd.style.display = 'none';
+          document.getElementById('partyBalDisplay').innerText = 'Bal: ' + (parseFloat(p.current_balance) || 0).toFixed(2);
+          setPaymentMethod('CREDIT');
+        };
+        dd.appendChild(div);
+      });
+      dd.style.display = matches.length ? 'block' : 'none';
+    }
+
+    function handleItemSearch(query) {
+      var q = (query || '').trim().toUpperCase();
+      var dd = document.getElementById('itemSuggestions');
+      if (!q) { dd.style.display = 'none'; return; }
+      var matches = productsList.filter(function(p) {
+        return (p.name_en || '').toUpperCase().indexOf(q) !== -1 ||
+               (p.barcode1 && p.barcode1.toUpperCase().indexOf(q) !== -1) ||
+               (p.item_code && p.item_code.toUpperCase().indexOf(q) !== -1);
+      }).slice(0, 12);
+
+      dd.innerHTML = '';
+      matches.forEach(function(p) {
+        var div = document.createElement('div');
+        div.className = 'suggestion-row';
+        var price = parseFloat(mainMode === 'purchase' ? p.cost_price : p.selling_price) || 0;
+        div.innerHTML = '<div><b>' + p.name_en + '</b><br><small style="color:#94a3b8;">' + (p.barcode1 || '') + ' | Stk: ' + (p.stock_quantity || 0) + '</small></div><div><b style="color:#38bdf8;">' + price.toFixed(2) + '</b></div>';
+        div.onclick = function() {
+          addItemToCartOrStock(p);
+          document.getElementById('itemSearchInput').value = '';
+          dd.style.display = 'none';
+        };
+        dd.appendChild(div);
+      });
+      dd.style.display = matches.length ? 'block' : 'none';
+    }
+
+    function handleItemEnter(val) {
+      var code = (val || '').trim().toUpperCase();
+      if (!code) return;
+      var found = productsList.find(function(p) {
+        return p.barcode1 === code || p.barcode2 === code || p.item_code === code;
+      });
+      if (found) {
+        addItemToCartOrStock(found);
+        showToastMsg('✅ ' + found.name_en);
+      } else {
+        showToastMsg('❌ Not Found: ' + code, true);
+      }
+      document.getElementById('itemSearchInput').value = '';
+      document.getElementById('itemSuggestions').style.display = 'none';
+    }
+
+    function addItemToCartOrStock(p) {
+      if (mainMode === 'stock') {
+        stockTargetItem = p;
+        document.getElementById('stkItemName').innerText = p.name_en;
+        document.getElementById('stkCurrentStock').innerText = p.stock_quantity || 0;
+        document.getElementById('inputPhysicalCount').value = p.stock_quantity || 0;
+        document.getElementById('inputPhysicalCount').focus();
+        return;
+      }
+      var exist = cart.find(function(it) { return it.product_id === p.id; });
+      var price = parseFloat(mainMode === 'purchase' ? p.cost_price : p.selling_price) || 0;
+      if (exist) {
+        exist.quantity += 1;
+      } else {
+        cart.push({
+          product_id: p.id, barcode: p.barcode1 || '', name_en: p.name_en, name_ar: p.name_ar || '',
+          unit: p.unit || 'PCS', cost_price: parseFloat(p.cost_price) || 0, selling_price: price, quantity: 1
+        });
+      }
+      renderCart();
+    }
+
+    function renderCart() {
+      var tbody = document.getElementById('cartTableBody');
+      tbody.innerHTML = '';
+      var subtotal = 0;
+      if (!cart.length) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#64748b; padding:12px;">Search item or tap 📷 Scan</td></tr>';
+        document.getElementById('lblSubtotal').innerText = '0.00 SAR';
+        document.getElementById('lblVat').innerText = '0.00 SAR';
+        document.getElementById('lblNetTotal').innerText = '0.00 SAR';
+        document.getElementById('cartCount').innerText = '0';
+        return;
+      }
+      cart.forEach(function(it, idx) {
+        var lineTot = it.quantity * it.selling_price;
+        subtotal += lineTot;
+        var tr = document.createElement('tr');
+        tr.innerHTML =
+          '<td><b>' + it.name_en + '</b></td>' +
+          '<td style="text-align:center;"><input type="number" step="any" class="cart-qty-input" value="' + it.quantity + '" onchange="cart[' + idx + '].quantity=parseFloat(this.value)||1;renderCart()"></td>' +
+          '<td style="text-align:right;"><input type="number" step="0.01" class="cart-price-input" value="' + it.selling_price.toFixed(2) + '" onchange="cart[' + idx + '].selling_price=parseFloat(this.value)||0;renderCart()"></td>' +
+          '<td style="text-align:right; font-weight:bold; color:#38bdf8;">' + lineTot.toFixed(2) + '</td>' +
+          '<td style="text-align:center;"><button type="button" class="btn-del" onclick="cart.splice(' + idx + ',1);renderCart()">×</button></td>';
+        tbody.appendChild(tr);
+      });
+      var baseExcl = subtotal / 1.15;
+      document.getElementById('cartCount').innerText = cart.length;
+      document.getElementById('lblSubtotal').innerText = baseExcl.toFixed(2) + ' SAR';
+      document.getElementById('lblVat').innerText = (subtotal - baseExcl).toFixed(2) + ' SAR';
+      document.getElementById('lblNetTotal').innerText = subtotal.toFixed(2) + ' SAR';
+    }
+
+    function clearCart() { cart = []; renderCart(); }
+
+    function toggleCameraScanner() {
+      var wrap = document.getElementById('scannerWrapper');
+      if (wrap.style.display === 'block') {
+        stopCameraScanner();
+        return;
+      }
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        alert('Camera not supported in this browser.');
+        return;
+      }
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }).then(function(stream) {
+        videoStream = stream;
+        var video = document.getElementById('scannerVideo');
+        video.srcObject = stream;
+        video.play();
+        wrap.style.display = 'block';
+        document.getElementById('btnCamToggle').innerText = '⏹️ Stop';
+
+        scanTimer = setInterval(function() {
+          if (!barcodeDetector || !videoStream || video.readyState < 2) return;
+          barcodeDetector.detect(video).then(function(codes) {
+            if (codes && codes.length > 0) {
+              var code = codes[0].rawValue.trim().toUpperCase();
+              if (navigator.vibrate) navigator.vibrate(80);
+              stopCameraScanner();
+              handleItemEnter(code);
+            }
+          }).catch(function() {});
+        }, 300);
+      }).catch(function(err) {
+        alert('Camera Permission Error: ' + err.message);
+      });
+    }
+
+    function stopCameraScanner() {
+      if (scanTimer) { clearInterval(scanTimer); scanTimer = null; }
+      if (videoStream) {
+        videoStream.getTracks().forEach(function(t) { t.stop(); });
+        videoStream = null;
+      }
+      document.getElementById('scannerWrapper').style.display = 'none';
+      document.getElementById('btnCamToggle').innerText = '📷 Scan';
+    }
+
+    function generateZatcaQrBase64(seller, vatNo, ts, total, vat) {
+      function tlv(tag, val) {
+        var str = unescape(encodeURIComponent(String(val)));
+        return String.fromCharCode(tag) + String.fromCharCode(str.length) + str;
+      }
+      var raw = tlv(1, seller) + tlv(2, vatNo) + tlv(3, ts) + tlv(4, Number(total).toFixed(2)) + tlv(5, Number(vat).toFixed(2));
+      return btoa(raw);
+    }
+
+    function generateSequentialInvoiceNo(term, dateStr) {
+      var d = dateStr.replace(/-/g, '');
+      var prefix = term + '-' + d + '-';
+      return sbFetch('invoices?select=invoice_no&invoice_no=ilike.' + prefix + '*&order=invoice_no.desc&limit=1').then(function(data) {
+        var next = 1;
+        if (data && data.length > 0) {
+          var parts = data[0].invoice_no.split('-');
+          var last = parseInt(parts[parts.length - 1], 10);
+          if (!isNaN(last)) next = last + 1;
+        }
+        var seqStr = ('0000' + next).slice(-4);
+        return prefix + seqStr;
+      }).catch(function() {
+        return prefix + String(Date.now()).slice(-4);
+      });
+    }
+
+    // DIRECT ESC/POS & SUNMI PRINT PLUGIN FOR JS DISPATCHER
+    function sendToSunmiPrintPlugin(inv) {
+      var cfg = getCloudConfig();
+      var storeName = (storeSettings.company_name_en || 'RETAIL STORE').toUpperCase();
+      var vatNo = storeSettings.vat_number || '300000000000003';
+      var line = '--------------------------------\n';
+
+      // Build clean 58mm Receipt Text + ESC/POS Commands
+      var receiptText = '';
+      receiptText += '\x1B\x40'; // Init printer
+      receiptText += '\x1B\x61\x01'; // Center align
+      receiptText += '\x1B\x21\x10' + storeName + '\n';
+      receiptText += '\x1B\x21\x00VAT: ' + vatNo + '\n';
+      receiptText += (inv.is_return ? 'CREDIT NOTE\n' : 'SIMPLIFIED TAX INVOICE\n');
+      receiptText += line;
+      receiptText += '\x1B\x61\x00'; // Left align
+      receiptText += 'Inv No : ' + inv.invoice_no + '\n';
+      receiptText += 'Date   : ' + inv.invoice_date + ' ' + (inv.invoice_time || '') + '\n';
+      receiptText += 'Party  : ' + (inv.customer_name || 'WALK-IN') + '\n';
+      receiptText += line;
+      receiptText += 'Item              Qty   Total\n';
+      receiptText += line;
+
+      (inv.items || []).forEach(function(it) {
+        var nm = (it.name_en || 'ITEM').slice(0, 16);
+        while (nm.length < 17) nm += ' ';
+        var qt = String(it.quantity);
+        while (qt.length < 5) qt += ' ';
+        var tot = Number(it.line_total).toFixed(2);
+        receiptText += nm + qt + tot + '\n';
+      });
+
+      receiptText += line;
+      receiptText += 'Subtotal (Excl VAT): ' + Number(inv.subtotal).toFixed(2) + '\n';
+      receiptText += 'VAT (15%)          : ' + Number(inv.vat_amount).toFixed(2) + '\n';
+      receiptText += '\x1B\x21\x10TOTAL : ' + Number(inv.total_amount).toFixed(2) + ' SAR\n';
+      receiptText += '\x1B\x21\x00Mode  : ' + inv.payment_method + '\n';
+      receiptText += line;
+      receiptText += '\x1B\x61\x01Thank You For Shopping!\n\n\n\n';
+
+      // Method 1: Native JS interface injected by Sunmi WebView / Plugin
+      if (window.sunmiPrinter && typeof window.sunmiPrinter.printText === 'function') {
+        window.sunmiPrinter.printText(receiptText);
+        if (inv.zatca_qr && window.sunmiPrinter.printQRCode) {
+          window.sunmiPrinter.printQRCode(inv.zatca_qr, 6, 1);
+          window.sunmiPrinter.lineWrap(3);
+        }
+        showToastMsg('🖨️ Printed on SUNMI!');
+        return;
+      }
+
+      // Method 2: Sunmi Print Plugin for JS Local HTTP Server (127.0.0.1:8080 or 8000)
+      var endpoints = [
+        'http://127.0.0.1:' + cfg.pluginPort + '/print',
+        'http://127.0.0.1:' + cfg.pluginPort + '/api/print',
+        'http://127.0.0.1:8000/print'
+      ];
+
+      var payload = {
+        text: receiptText,
+        qr: inv.zatca_qr || '',
+        align: 1,
+        width: 58
+      };
+
+      fetch(endpoints[0], {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }).then(function() {
+        showToastMsg('🖨️ Printed via Sunmi Plugin!');
+      }).catch(function() {
+        // Try secondary port 8000 or WebSocket
+        fetch(endpoints[2], {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        }).then(function() {
+          showToastMsg('🖨️ Printed via Sunmi Plugin!');
+        }).catch(function() {
+          try {
+            var ws = new WebSocket('ws://127.0.0.1:' + cfg.pluginPort);
+            ws.onopen = function() {
+              ws.send(JSON.stringify(payload));
+              showToastMsg('🖨️ Printed via Sunmi WS!');
+              setTimeout(function() { ws.close(); }, 500);
+            };
+            ws.onerror = function() {
+              alert('Sunmi Print Plugin തുറന്ന് Start ആക്കുക! (App Store -> Sunmi Print plugin for -> Open)');
+            };
+          } catch (e) {
+            alert('Sunmi Print Plugin തുറന്ന് Start ആക്കുക!');
+          }
+        });
+      });
+    }
+
+    function testSunmiJsPrint() {
+      sendToSunmiPrintPlugin({
+        invoice_no: 'TEST-001',
+        invoice_date: new Date().toISOString().slice(0, 10),
+        invoice_time: new Date().toTimeString().slice(0, 8),
+        customer_name: 'TEST CUSTOMER',
+        subtotal: 10.00,
+        vat_amount: 1.50,
+        total_amount: 11.50,
+        payment_method: 'CASH',
+        zatca_qr: 'TEST_ZATCA_QR_CODE',
+        items: [{ name_en: 'TEST ITEM', quantity: 1, line_total: 11.50 }]
+      });
+    }
+
+    function executeCheckout(action) {
+      if (isSaving || !cart.length) return;
+      if (selectedPayMethod === 'CREDIT' && !activeParty) {
+        alert('Select a customer for Credit!');
+        return;
+      }
+      isSaving = true;
+
+      var cfg = getCloudConfig();
+      var now = new Date();
+      var invDate = now.toISOString().slice(0, 10);
+      var invTime = now.toTimeString().slice(0, 8);
+      var netTotal = cart.reduce(function(s, it) { return s + (it.quantity * it.selling_price); }, 0);
+      var baseExcl = netTotal / 1.15;
+      var vatAmt = netTotal - baseExcl;
+      var isCredit = selectedPayMethod === 'CREDIT';
+      var isReturn = subMode === 'return' ? 1 : 0;
+      var uniqueId = Date.now();
+      var zatcaQr = generateZatcaQrBase64(storeSettings.company_name_en || 'STORE', storeSettings.vat_number || '300000000000003', now.toISOString(), netTotal, vatAmt);
+
+      generateSequentialInvoiceNo(cfg.terminalId, invDate).then(function(invoiceNo) {
+        var invRecord = {
+          id: uniqueId, invoice_no: invoiceNo, terminal_id: cfg.terminalId, invoice_date: invDate, invoice_time: invTime,
+          is_return: isReturn, party_id: activeParty ? activeParty.id : null,
+          customer_name: activeParty ? activeParty.name_en : (document.getElementById('partySearchInput').value.trim() || 'WALK-IN CUSTOMER'),
+          customer_phone: activeParty ? activeParty.phone : null, customer_vat: activeParty ? activeParty.vat_number : null,
+          subtotal: Number(baseExcl.toFixed(2)), vat_amount: Number(vatAmt.toFixed(2)), total_amount: Number(netTotal.toFixed(2)),
+          payment_method: selectedPayMethod,
+          paid_cash: isCredit ? 0 : (selectedPayMethod === 'CASH' ? Number(netTotal.toFixed(2)) : 0),
+          paid_bank: isCredit ? 0 : (selectedPayMethod === 'BANK' ? Number(netTotal.toFixed(2)) : 0),
+          paid_credit: isCredit ? Number(netTotal.toFixed(2)) : 0,
+          zatca_qr: zatcaQr, source_device: 'MOBILE', is_synced: 0
+        };
+
+        var itemsRecords = cart.map(function(it, i) {
+          var lt = Number((it.quantity * it.selling_price).toFixed(2));
+          return {
+            id: uniqueId + i + 1, invoice_id: uniqueId, product_id: it.product_id, barcode: it.barcode,
+            name_en: it.name_en, name_ar: it.name_ar, unit: it.unit, cost_price: it.cost_price,
+            selling_price: it.selling_price, quantity: it.quantity,
+            vat_amount: Number((lt - lt / 1.15).toFixed(2)), line_total: lt, source_device: 'MOBILE', is_synced: 0
+          };
+        });
+
+        return sbFetch('invoices', { method: 'POST', body: invRecord }).then(function() {
+          return sbFetch('invoice_items', { method: 'POST', body: itemsRecords });
+        }).then(function() {
+          var tasks = cart.map(function(it) {
+            var prod = productsList.find(function(p) { return p.id === it.product_id; });
+            if (!prod) return Promise.resolve();
+            var newQty = Number(((parseFloat(prod.stock_quantity) || 0) + (isReturn ? it.quantity : -it.quantity)).toFixed(2));
+            return sbFetch('products?id=eq.' + it.product_id, { method: 'PATCH', body: { stock_quantity: newQty, is_synced: 0 } });
+          });
+          if (activeParty && isCredit) {
+            var newBal = Number(((parseFloat(activeParty.current_balance) || 0) + (isReturn ? -netTotal : netTotal)).toFixed(2));
+            tasks.push(sbFetch('parties?id=eq.' + activeParty.id, { method: 'PATCH', body: { current_balance: newBal, is_synced: 0 } }));
+          }
+          return Promise.all(tasks);
+        }).then(function() {
+          invRecord.items = itemsRecords;
+          if (action === 'sunmi') {
+            sendToSunmiPrintPlugin(invRecord);
+          } else {
+            showToastMsg('✅ Saved: ' + invoiceNo);
+          }
+          clearCart();
+          activeParty = null;
+          document.getElementById('partySearchInput').value = '';
+          loadInitialData(false);
+        });
+      }).catch(function(err) {
+        alert('Save Error: ' + err.message);
+      }).finally(function() {
+        isSaving = false;
+      });
+    }
+
+    function executePurchaseSave() {
+      if (isSaving || !cart.length) return;
+      var suppBill = document.getElementById('inputSuppBillNo').value.trim();
+      if (!suppBill) { alert('Enter Supplier Bill No!'); return; }
+      isSaving = true;
+
+      var uniqueId = Date.now();
+      var purDate = new Date().toISOString().slice(0, 10);
+      var netTotal = cart.reduce(function(s, it) { return s + (it.quantity * it.selling_price); }, 0);
+      var baseExcl = netTotal / 1.15;
+      var vatAmt = netTotal - baseExcl;
+      var isReturn = subMode === 'return' ? 1 : 0;
+      var isCredit = selectedPayMethod === 'CREDIT';
+
+      var purRecord = {
+        id: uniqueId,
+        purchase_no: (isReturn ? 'PRET' : 'PUR') + '-S1-' + String(uniqueId).slice(-5),
+        supplier_inv_no: suppBill, is_return: isReturn, purchase_date: purDate,
+        party_id: activeParty ? activeParty.id : null,
+        vendor_name: activeParty ? activeParty.name_en : 'CASH SUPPLIER',
+        subtotal: Number(baseExcl.toFixed(2)), vat_amount: Number(vatAmt.toFixed(2)), total_amount: Number(netTotal.toFixed(2)),
+        payment_method: selectedPayMethod,
+        paid_cash: isCredit ? 0 : Number(netTotal.toFixed(2)),
+        paid_credit: isCredit ? Number(netTotal.toFixed(2)) : 0,
+        source_device: 'MOBILE', is_synced: 0
+      };
+
+      var pItems = cart.map(function(it, i) {
+        var lt = Number((it.quantity * it.selling_price).toFixed(2));
+        return {
+          id: uniqueId + i + 1, purchase_id: uniqueId, product_id: it.product_id,
+          barcode: it.barcode, name_en: it.name_en, quantity: it.quantity,
+          cost_price: it.selling_price, vat_amount: Number((lt - lt / 1.15).toFixed(2)), line_total: lt, is_synced: 0
+        };
+      });
+
+      sbFetch('purchases', { method: 'POST', body: purRecord }).then(function() {
+        return sbFetch('purchase_items', { method: 'POST', body: pItems });
+      }).then(function() {
+        var tasks = cart.map(function(it) {
+          var prod = productsList.find(function(p) { return p.id === it.product_id; });
+          if (!prod) return Promise.resolve();
+          var delta = isReturn ? -it.quantity : it.quantity;
+          var newQty = Number(((parseFloat(prod.stock_quantity) || 0) + delta).toFixed(2));
+          return sbFetch('products?id=eq.' + it.product_id, { method: 'PATCH', body: { stock_quantity: newQty, cost_price: it.selling_price, is_synced: 0 } });
+        });
+        return Promise.all(tasks);
+      }).then(function() {
+        showToastMsg('✅ Purchase Saved!');
+        clearCart();
+        document.getElementById('inputSuppBillNo').value = '';
+        loadInitialData(false);
+      }).catch(function(e) {
+        alert('Purchase Error: ' + e.message);
+      }).finally(function() {
+        isSaving = false;
+      });
+    }
+
+    function saveStockTake() {
+      if (!stockTargetItem) return;
+      var count = parseFloat(document.getElementById('inputPhysicalCount').value);
+      if (isNaN(count) || count < 0) return;
+      sbFetch('products?id=eq.' + stockTargetItem.id, { method: 'PATCH', body: { stock_quantity: count, is_synced: 0 } }).then(function() {
+        showToastMsg('✅ Stock Updated: ' + count);
+        stockTargetItem = null;
+        document.getElementById('stkItemName').innerText = 'Search or scan next item';
+        document.getElementById('inputPhysicalCount').value = '';
+        loadInitialData(false);
+      }).catch(function(e) { alert('Stock Error: ' + e.message); });
+    }
+
+    function openRecentBillsModal() {
+      document.getElementById('recentBillsModal').style.display = 'flex';
+      var listEl = document.getElementById('recentBillsList');
+      listEl.innerHTML = 'Loading...';
+      sbFetch('invoices?select=*&order=id.desc&limit=15').then(function(data) {
+        listEl.innerHTML = '';
+        (data || []).forEach(function(inv) {
+          var div = document.createElement('div');
+          div.className = 'bill-item';
+          div.innerHTML = '<div><b>' + inv.invoice_no + '</b><br><small style="color:#94a3b8;">' + inv.invoice_date + ' | ' + Number(inv.total_amount).toFixed(2) + ' SAR</small></div>' +
+            '<button type="button" class="btn-icon" style="background:#f97316;" onclick="reprintSunmi(' + inv.id + ')">🖨️ Print</button>';
+          listEl.appendChild(div);
+        });
+      });
+    }
+
+    function reprintSunmi(id) {
+      Promise.all([
+        sbFetch('invoices?id=eq.' + id + '&select=*'),
+        sbFetch('invoice_items?invoice_id=eq.' + id + '&select=*')
+      ]).then(function(res) {
+        if (res[0] && res[0].length) {
+          var inv = res[0][0];
+          inv.items = res[1] || [];
+          document.getElementById('recentBillsModal').style.display = 'none';
+          sendToSunmiPrintPlugin(inv);
+        }
+      });
+    }
+
+    function openServerConfigModal() {
+      var cfg = getCloudConfig();
+      document.getElementById('cfgTerminalId').value = cfg.terminalId;
+      document.getElementById('cfgPluginPort').value = cfg.pluginPort;
+      document.getElementById('cfgSbUrl').value = cfg.sbUrl;
+      document.getElementById('cfgSbKey').value = cfg.sbKey;
+      document.getElementById('serverModal').style.display = 'flex';
+    }
+
+    function saveServerConfig() {
+      localStorage.setItem('sunmi_terminal_id', document.getElementById('cfgTerminalId').value.trim() || 'S1');
+      localStorage.setItem('sunmi_plugin_port', document.getElementById('cfgPluginPort').value.trim() || '8080');
+      localStorage.setItem('sampos_sb_url', document.getElementById('cfgSbUrl').value.trim());
+      localStorage.setItem('sampos_sb_key', document.getElementById('cfgSbKey').value.trim());
+      document.getElementById('serverModal').style.display = 'none';
+      loadInitialData(true);
+    }
+  </script>
+</body>
+</html>
