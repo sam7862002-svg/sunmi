@@ -8,6 +8,7 @@
 
     <queries>
         <package android:name="woyou.aidlservice.jiuiv5" />
+        <package android:name="com.sunmi.scanner" />
     </queries>
 
     <application
@@ -36,6 +37,7 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="sampos" android:host="print" />
                 <data android:scheme="sampos" android:host="tag" />
+                <data android:scheme="sampos" android:host="scan" />
             </intent-filter>
         </activity>
     </application>
