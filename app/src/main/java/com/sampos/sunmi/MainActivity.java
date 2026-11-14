@@ -4,6 +4,8 @@ import android.content.Intent;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.RemoteException;
 import android.text.InputType;
 import android.view.Gravity;
@@ -26,9 +28,10 @@ public class MainActivity extends AppCompatActivity {
     private TextView statusTxt;
     private EditText etItemName, etPrice, etBarcode, etItemCode, etCopies, etPosUrl;
     private SunmiPrinterService sunmiPrinterService;
+    private String pendingPrintText = null;
+    private String pendingPrintQr = null;
 
-    // നിങ്ങളുടെ GitHub Pages URL (Settings-ൽ മാറ്റാനും സാധിക്കും)
-    private static final String DEFAULT_POS_URL = "https://sam7862002-svg.github.io/bagala/sunmi.html";
+    private static final String DEFAULT_POS_URL = "https://sam7862002-svg.github.io/bakala/sunmi.html";
 
     private final InnerPrinterCallback innerPrinterCallback = new InnerPrinterCallback() {
         @Override
@@ -38,6 +41,11 @@ public class MainActivity extends AppCompatActivity {
                 if (statusTxt != null) {
                     statusTxt.setText("✅ SUNMI Printer Connected!");
                     statusTxt.setTextColor(Color.parseColor("#4ade80"));
+                }
+                if (pendingPrintText != null) {
+                    executeDirectPrint(pendingPrintText, pendingPrintQr);
+                    pendingPrintText = null;
+                    pendingPrintQr = null;
                 }
             });
         }
@@ -74,7 +82,6 @@ public class MainActivity extends AppCompatActivity {
         statusTxt.setPadding(0, 12, 0, 28);
         root.addView(statusTxt);
 
-        // 1. Open POS in Chrome Custom Tab (Zero Crash!)
         Button btnOpenPos = new Button(this);
         btnOpenPos.setText("🚀 OPEN POS (CHROME MODE)");
         btnOpenPos.setBackgroundColor(Color.parseColor("#2563eb"));
@@ -84,7 +91,6 @@ public class MainActivity extends AppCompatActivity {
         btnOpenPos.setOnClickListener(v -> openPosInChrome());
         root.addView(btnOpenPos);
 
-        // Divider
         TextView tagHeader = new TextView(this);
         tagHeader.setText("\n🏷️ SHELF TAG & BARCODE PRINTER");
         tagHeader.setTextColor(Color.parseColor("#f97316"));
@@ -126,7 +132,6 @@ public class MainActivity extends AppCompatActivity {
         btnPrintBarcode.setOnClickListener(v -> handleBarcodeOnlyPrint());
         root.addView(btnPrintBarcode);
 
-        // POS URL setting
         TextView urlLbl = new TextView(this);
         urlLbl.setText("\n⚙️ POS Web URL:");
         urlLbl.setTextColor(Color.parseColor("#94a3b8"));
@@ -145,6 +150,50 @@ public class MainActivity extends AppCompatActivity {
             InnerPrinterManager.getInstance().bindService(this, innerPrinterCallback);
         } catch (Throwable t) {
             statusTxt.setText("Printer Bind Error: " + t.getMessage());
+        }
+
+        handlePrintIntent(getIntent());
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        handlePrintIntent(intent);
+    }
+
+    private void handlePrintIntent(Intent intent) {
+        if (intent == null || intent.getData() == null) return;
+        Uri uri = intent.getData();
+        if ("sampos".equals(uri.getScheme()) && "print".equals(uri.getHost())) {
+            String text = uri.getQueryParameter("text");
+            String qr = uri.getQueryParameter("qr");
+            if (text != null) {
+                if (sunmiPrinterService != null) {
+                    executeDirectPrint(text, qr);
+                } else {
+                    pendingPrintText = text;
+                    pendingPrintQr = qr;
+                }
+            }
+        }
+    }
+
+    private void executeDirectPrint(String text, String qr) {
+        try {
+            String cleanText = text.replaceAll("[\\x00-\\x09\\x0B-\\x1F]", "");
+            sunmiPrinterService.printerInit(null);
+            sunmiPrinterService.setFontSize(22, null);
+            sunmiPrinterService.printText(cleanText + "\n", null);
+            if (qr != null && !qr.isEmpty()) {
+                sunmiPrinterService.setAlignment(1, null);
+                sunmiPrinterService.printQRCode(qr, 6, 1, null);
+            }
+            sunmiPrinterService.lineWrap(4, null);
+            Toast.makeText(this, "🖨️ Bill Printed!", Toast.LENGTH_SHORT).show();
+            new Handler(Looper.getMainLooper()).postDelayed(this::openPosInChrome, 600);
+        } catch (RemoteException e) {
+            e.printStackTrace();
         }
     }
 
