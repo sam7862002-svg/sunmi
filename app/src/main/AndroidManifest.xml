@@ -35,6 +35,7 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="sampos" android:host="print" />
+                <data android:scheme="sampos" android:host="tag" />
             </intent-filter>
         </activity>
     </application>
