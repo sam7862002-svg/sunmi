@@ -1,40 +1,48 @@
 package com.sampos.sunmi;
 
-import android.Manifest;
 import android.annotation.SuppressLint;
-import android.content.pm.PackageManager;
+import android.graphics.Color;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.RemoteException;
+import android.view.Gravity;
+import android.view.View;
+import android.webkit.ConsoleMessage;
 import android.webkit.JavascriptInterface;
 import android.webkit.PermissionRequest;
 import android.webkit.WebChromeClient;
-import android.webkit.WebResourceError;
-import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.Button;
+import android.widget.FrameLayout;
+import android.widget.LinearLayout;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.app.ActivityCompat;
-import androidx.core.content.ContextCompat;
 
 import com.sunmi.peripheral.printer.InnerPrinterCallback;
 import com.sunmi.peripheral.printer.InnerPrinterManager;
 import com.sunmi.peripheral.printer.SunmiPrinterService;
 
+import java.io.InputStream;
+
 public class MainActivity extends AppCompatActivity {
 
     private WebView webView;
+    private TextView statusText;
     private SunmiPrinterService sunmiPrinterService;
-
-    private static final String POS_URL = "file:///android_asset/sunmi.html";
 
     private final InnerPrinterCallback innerPrinterCallback = new InnerPrinterCallback() {
         @Override
         protected void onConnected(SunmiPrinterService service) {
             sunmiPrinterService = service;
-            runOnUiThread(() -> Toast.makeText(MainActivity.this, "SUNMI Printer Connected!", Toast.LENGTH_SHORT).show());
+            runOnUiThread(() -> {
+                if (statusText != null) statusText.setText("Printer: CONNECTED");
+                Toast.makeText(MainActivity.this, "SUNMI Printer Connected!", Toast.LENGTH_SHORT).show();
+            });
         }
 
         @Override
@@ -48,58 +56,96 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        try {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-                ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.CAMERA}, 101);
-            }
-        } catch (Throwable ignored) {}
+        // 1. Safe fallback layout so app NEVER crashes on startup
+        FrameLayout root = new FrameLayout(this);
+        root.setBackgroundColor(Color.WHITE);
 
+        LinearLayout infoBox = new LinearLayout(this);
+        infoBox.setOrientation(LinearLayout.VERTICAL);
+        infoBox.setGravity(Gravity.CENTER);
+        infoBox.setPadding(32, 32, 32, 32);
+
+        statusText = new TextView(this);
+        statusText.setText("Starting SAMPOS...");
+        statusText.setTextColor(Color.BLACK);
+        statusText.setTextSize(16);
+        statusText.setGravity(Gravity.CENTER);
+        infoBox.addView(statusText);
+
+        Button testBtn = new Button(this);
+        testBtn.setText("TEST SUNMI PRINTER");
+        testBtn.setOnClickListener(v -> {
+            new SunmiJsBridge().printText("=== SAMPOS TEST PRINT ===\nSUNMI V2s Direct Print OK!\n=========================");
+        });
+        infoBox.addView(testBtn);
+
+        root.addView(infoBox);
+        setContentView(root);
+
+        // 2. Bind SUNMI Printer safely
         try {
             InnerPrinterManager.getInstance().bindService(this, innerPrinterCallback);
         } catch (Throwable t) {
-            t.printStackTrace();
+            statusText.setText("Printer Bind Error: " + t.getMessage());
         }
 
+        // 3. Check if sunmi.html exists in assets
+        boolean assetExists = false;
         try {
-            webView = new WebView(this);
-            setContentView(webView);
-
-            WebSettings settings = webView.getSettings();
-            settings.setJavaScriptEnabled(true);
-            settings.setDomStorageEnabled(true);
-            settings.setDatabaseEnabled(true);
-            settings.setAllowFileAccess(true);
-            settings.setAllowFileAccessFromFileURLs(true);
-            settings.setAllowUniversalAccessFromFileURLs(true);
-            settings.setMediaPlaybackRequiresUserGesture(false);
-            settings.setCacheMode(WebSettings.LOAD_DEFAULT);
-
-            webView.addJavascriptInterface(new SunmiJsBridge(), "sunmiPrinter");
-
-            webView.setWebViewClient(new WebViewClient() {
-                @Override
-                public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
-                    if (request != null && request.isForMainFrame()) {
-                        runOnUiThread(() -> Toast.makeText(MainActivity.this, "Page Error: " + error.getDescription(), Toast.LENGTH_LONG).show());
-                    }
-                }
-            });
-
-            webView.setWebChromeClient(new WebChromeClient() {
-                @Override
-                public void onPermissionRequest(final PermissionRequest request) {
-                    runOnUiThread(() -> {
-                        try {
-                            request.grant(request.getResources());
-                        } catch (Throwable ignored) {}
-                    });
-                }
-            });
-
-            webView.loadUrl(POS_URL);
+            InputStream is = getAssets().open("sunmi.html");
+            is.close();
+            assetExists = true;
         } catch (Throwable e) {
-            Toast.makeText(this, "Startup Error: " + e.getMessage(), Toast.LENGTH_LONG).show();
+            statusText.setText("ERROR: 'sunmi.html' not found in assets folder!\n(" + e.getMessage() + ")");
         }
+
+        if (!assetExists) return;
+
+        // 4. Load WebView after short delay to prevent Android 7.1 startup crash
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            try {
+                webView = new WebView(MainActivity.this);
+                WebSettings settings = webView.getSettings();
+                settings.setJavaScriptEnabled(true);
+                settings.setDomStorageEnabled(true);
+                settings.setDatabaseEnabled(true);
+                settings.setAllowFileAccess(true);
+                settings.setAllowFileAccessFromFileURLs(true);
+                settings.setAllowUniversalAccessFromFileURLs(true);
+                settings.setMediaPlaybackRequiresUserGesture(false);
+                settings.setCacheMode(WebSettings.LOAD_DEFAULT);
+
+                webView.addJavascriptInterface(new SunmiJsBridge(), "sunmiPrinter");
+
+                webView.setWebViewClient(new WebViewClient() {
+                    @Override
+                    public void onPageFinished(WebView view, String url) {
+                        infoBox.setVisibility(View.GONE);
+                    }
+                });
+
+                webView.setWebChromeClient(new WebChromeClient() {
+                    @Override
+                    public void onPermissionRequest(final PermissionRequest request) {
+                        runOnUiThread(() -> {
+                            try {
+                                request.grant(request.getResources());
+                            } catch (Throwable ignored) {}
+                        });
+                    }
+
+                    @Override
+                    public boolean onConsoleMessage(ConsoleMessage cm) {
+                        return true;
+                    }
+                });
+
+                root.addView(webView);
+                webView.loadUrl("file:///android_asset/sunmi.html");
+            } catch (Throwable e) {
+                statusText.setText("WebView Crash Prevented:\n" + e.toString());
+            }
+        }, 500);
     }
 
     public class SunmiJsBridge {
@@ -114,6 +160,7 @@ public class MainActivity extends AppCompatActivity {
                 sunmiPrinterService.printerInit(null);
                 sunmiPrinterService.setFontSize(22, null);
                 sunmiPrinterService.printText(cleanText + "\n", null);
+                sunmiPrinterService.lineWrap(3, null);
             } catch (RemoteException e) {
                 e.printStackTrace();
             }
