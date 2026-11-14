@@ -27,8 +27,7 @@ public class MainActivity extends AppCompatActivity {
     private WebView webView;
     private SunmiPrinterService sunmiPrinterService;
 
-    // നിങ്ങളുടെ ശരിയായ GitHub Pages URL
-    private static final String POS_URL = "https://sam7862002-svg.github.io/bagala/sunmi.html";
+    private static final String POS_URL = "file:///android_asset/sunmi.html";
 
     private final InnerPrinterCallback innerPrinterCallback = new InnerPrinterCallback() {
         @Override
@@ -66,6 +65,8 @@ public class MainActivity extends AppCompatActivity {
         settings.setDomStorageEnabled(true);
         settings.setDatabaseEnabled(true);
         settings.setAllowFileAccess(true);
+        settings.setAllowFileAccessFromFileURLs(true);
+        settings.setAllowUniversalAccessFromFileURLs(true);
         settings.setMediaPlaybackRequiresUserGesture(false);
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
 
