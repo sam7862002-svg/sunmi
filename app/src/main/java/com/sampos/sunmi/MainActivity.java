@@ -3,46 +3,38 @@ package com.sampos.sunmi;
 import android.annotation.SuppressLint;
 import android.graphics.Color;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
 import android.os.RemoteException;
-import android.view.Gravity;
-import android.view.View;
 import android.webkit.ConsoleMessage;
 import android.webkit.JavascriptInterface;
 import android.webkit.PermissionRequest;
 import android.webkit.WebChromeClient;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
-import android.widget.Button;
-import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.webkit.WebViewAssetLoader;
 
 import com.sunmi.peripheral.printer.InnerPrinterCallback;
 import com.sunmi.peripheral.printer.InnerPrinterManager;
 import com.sunmi.peripheral.printer.SunmiPrinterService;
 
-import java.io.InputStream;
-
 public class MainActivity extends AppCompatActivity {
 
     private WebView webView;
-    private TextView statusText;
+    private TextView debugBar;
     private SunmiPrinterService sunmiPrinterService;
 
     private final InnerPrinterCallback innerPrinterCallback = new InnerPrinterCallback() {
         @Override
         protected void onConnected(SunmiPrinterService service) {
             sunmiPrinterService = service;
-            runOnUiThread(() -> {
-                if (statusText != null) statusText.setText("Printer: CONNECTED");
-                Toast.makeText(MainActivity.this, "SUNMI Printer Connected!", Toast.LENGTH_SHORT).show();
-            });
+            runOnUiThread(() -> Toast.makeText(MainActivity.this, "SUNMI Printer Connected!", Toast.LENGTH_SHORT).show());
         }
 
         @Override
@@ -56,96 +48,75 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        // 1. Safe fallback layout so app NEVER crashes on startup
-        FrameLayout root = new FrameLayout(this);
-        root.setBackgroundColor(Color.WHITE);
+        LinearLayout layout = new LinearLayout(this);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setBackgroundColor(Color.WHITE);
 
-        LinearLayout infoBox = new LinearLayout(this);
-        infoBox.setOrientation(LinearLayout.VERTICAL);
-        infoBox.setGravity(Gravity.CENTER);
-        infoBox.setPadding(32, 32, 32, 32);
+        debugBar = new TextView(this);
+        debugBar.setBackgroundColor(Color.parseColor("#222222"));
+        debugBar.setTextColor(Color.YELLOW);
+        debugBar.setTextSize(12);
+        debugBar.setPadding(16, 8, 16, 8);
+        debugBar.setText("Loading POS...");
+        layout.addView(debugBar);
 
-        statusText = new TextView(this);
-        statusText.setText("Starting SAMPOS...");
-        statusText.setTextColor(Color.BLACK);
-        statusText.setTextSize(16);
-        statusText.setGravity(Gravity.CENTER);
-        infoBox.addView(statusText);
+        webView = new WebView(this);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1.0f);
+        webView.setLayoutParams(params);
+        layout.addView(webView);
 
-        Button testBtn = new Button(this);
-        testBtn.setText("TEST SUNMI PRINTER");
-        testBtn.setOnClickListener(v -> {
-            new SunmiJsBridge().printText("=== SAMPOS TEST PRINT ===\nSUNMI V2s Direct Print OK!\n=========================");
-        });
-        infoBox.addView(testBtn);
+        setContentView(layout);
 
-        root.addView(infoBox);
-        setContentView(root);
-
-        // 2. Bind SUNMI Printer safely
         try {
             InnerPrinterManager.getInstance().bindService(this, innerPrinterCallback);
-        } catch (Throwable t) {
-            statusText.setText("Printer Bind Error: " + t.getMessage());
-        }
+        } catch (Throwable ignored) {}
 
-        // 3. Check if sunmi.html exists in assets
-        boolean assetExists = false;
-        try {
-            InputStream is = getAssets().open("sunmi.html");
-            is.close();
-            assetExists = true;
-        } catch (Throwable e) {
-            statusText.setText("ERROR: 'sunmi.html' not found in assets folder!\n(" + e.getMessage() + ")");
-        }
+        final WebViewAssetLoader assetLoader = new WebViewAssetLoader.Builder()
+                .addPathHandler("/assets/", new WebViewAssetLoader.AssetsPathHandler(this))
+                .build();
 
-        if (!assetExists) return;
+        WebSettings settings = webView.getSettings();
+        settings.setJavaScriptEnabled(true);
+        settings.setDomStorageEnabled(true);
+        settings.setDatabaseEnabled(true);
+        settings.setAllowFileAccess(true);
+        settings.setMediaPlaybackRequiresUserGesture(false);
 
-        // 4. Load WebView after short delay to prevent Android 7.1 startup crash
-        new Handler(Looper.getMainLooper()).postDelayed(() -> {
-            try {
-                webView = new WebView(MainActivity.this);
-                WebSettings settings = webView.getSettings();
-                settings.setJavaScriptEnabled(true);
-                settings.setDomStorageEnabled(true);
-                settings.setDatabaseEnabled(true);
-                settings.setAllowFileAccess(true);
-                settings.setAllowFileAccessFromFileURLs(true);
-                settings.setAllowUniversalAccessFromFileURLs(true);
-                settings.setMediaPlaybackRequiresUserGesture(false);
-                settings.setCacheMode(WebSettings.LOAD_DEFAULT);
+        webView.addJavascriptInterface(new SunmiJsBridge(), "sunmiPrinter");
 
-                webView.addJavascriptInterface(new SunmiJsBridge(), "sunmiPrinter");
-
-                webView.setWebViewClient(new WebViewClient() {
-                    @Override
-                    public void onPageFinished(WebView view, String url) {
-                        infoBox.setVisibility(View.GONE);
-                    }
-                });
-
-                webView.setWebChromeClient(new WebChromeClient() {
-                    @Override
-                    public void onPermissionRequest(final PermissionRequest request) {
-                        runOnUiThread(() -> {
-                            try {
-                                request.grant(request.getResources());
-                            } catch (Throwable ignored) {}
-                        });
-                    }
-
-                    @Override
-                    public boolean onConsoleMessage(ConsoleMessage cm) {
-                        return true;
-                    }
-                });
-
-                root.addView(webView);
-                webView.loadUrl("file:///android_asset/sunmi.html");
-            } catch (Throwable e) {
-                statusText.setText("WebView Crash Prevented:\n" + e.toString());
+        webView.setWebViewClient(new WebViewClient() {
+            @Override
+            public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                return assetLoader.shouldInterceptRequest(request.getUrl());
             }
-        }, 500);
+
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                debugBar.setText("Loaded: " + view.getTitle());
+            }
+        });
+
+        webView.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public void onPermissionRequest(final PermissionRequest request) {
+                runOnUiThread(() -> {
+                    try {
+                        request.grant(request.getResources());
+                    } catch (Throwable ignored) {}
+                });
+            }
+
+            @Override
+            public boolean onConsoleMessage(ConsoleMessage cm) {
+                if (cm.messageLevel() == ConsoleMessage.MessageLevel.ERROR) {
+                    runOnUiThread(() -> debugBar.setText("JS Error (Line " + cm.lineNumber() + "): " + cm.message()));
+                }
+                return true;
+            }
+        });
+
+        webView.loadUrl("https://appassets.androidplatform.net/assets/sunmi.html");
     }
 
     public class SunmiJsBridge {
