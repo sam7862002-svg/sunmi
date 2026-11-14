@@ -16,9 +16,12 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.activity.result.ActivityResultLauncher;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.browser.customtabs.CustomTabsIntent;
 
+import com.journeyapps.barcodescanner.ScanContract;
+import com.journeyapps.barcodescanner.ScanOptions;
 import com.sunmi.peripheral.printer.InnerPrinterCallback;
 import com.sunmi.peripheral.printer.InnerPrinterManager;
 import com.sunmi.peripheral.printer.SunmiPrinterService;
@@ -29,8 +32,22 @@ public class MainActivity extends AppCompatActivity {
     private EditText etItemName, etPrice, etBarcode, etItemCode, etCopies, etPosUrl;
     private SunmiPrinterService sunmiPrinterService;
     private Intent pendingIntent = null;
+    private String currentScanMode = "sale";
 
     private static final String DEFAULT_POS_URL = "https://sam7862002-svg.github.io/bakala/sunmi.html";
+
+    private final ActivityResultLauncher<ScanOptions> barcodeLauncher = registerForActivityResult(
+            new ScanContract(),
+            result -> {
+                if (result.getContents() != null) {
+                    String scannedCode = result.getContents().trim();
+                    Toast.makeText(this, "✅ Scanned: " + scannedCode, Toast.LENGTH_SHORT).show();
+                    openPosWithBarcode(scannedCode, currentScanMode);
+                } else {
+                    openPosInChrome();
+                }
+            }
+    );
 
     private final InnerPrinterCallback innerPrinterCallback = new InnerPrinterCallback() {
         @Override
@@ -165,6 +182,13 @@ public class MainActivity extends AppCompatActivity {
         Uri uri = intent.getData();
         if (!"sampos".equals(uri.getScheme())) return;
 
+        if ("scan".equals(uri.getHost())) {
+            String mode = uri.getQueryParameter("mode");
+            currentScanMode = (mode != null && !mode.isEmpty()) ? mode : "sale";
+            startNativeScanner();
+            return;
+        }
+
         if (sunmiPrinterService == null) {
             pendingIntent = intent;
             return;
@@ -197,6 +221,15 @@ public class MainActivity extends AppCompatActivity {
             Toast.makeText(this, "🖨️ Printed " + copies + " Tag(s)!", Toast.LENGTH_SHORT).show();
             new Handler(Looper.getMainLooper()).postDelayed(this::openPosInChrome, 500);
         }
+    }
+
+    private void startNativeScanner() {
+        ScanOptions options = new ScanOptions();
+        options.setPrompt("Hold barcode 15-20cm from camera");
+        options.setBeepEnabled(true);
+        options.setOrientationLocked(true);
+        options.setDesiredBarcodeFormats(ScanOptions.ALL_CODE_TYPES);
+        barcodeLauncher.launch(options);
     }
 
     private void executeDirectPrint(String text, String qr) {
@@ -241,6 +274,19 @@ public class MainActivity extends AppCompatActivity {
             customTabsIntent.launchUrl(this, Uri.parse(url));
         } catch (Exception e) {
             startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
+        }
+    }
+
+    private void openPosWithBarcode(String barcode, String mode) {
+        String baseUrl = etPosUrl.getText().toString().trim();
+        if (baseUrl.isEmpty()) baseUrl = DEFAULT_POS_URL;
+        String finalUrl = baseUrl + "?scanned=" + Uri.encode(barcode) + "&mode=" + Uri.encode(mode);
+
+        try {
+            CustomTabsIntent customTabsIntent = new CustomTabsIntent.Builder().build();
+            customTabsIntent.launchUrl(this, Uri.parse(finalUrl));
+        } catch (Exception e) {
+            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(finalUrl)));
         }
     }
 
