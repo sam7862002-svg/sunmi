@@ -28,8 +28,7 @@ public class MainActivity extends AppCompatActivity {
     private TextView statusTxt;
     private EditText etItemName, etPrice, etBarcode, etItemCode, etCopies, etPosUrl;
     private SunmiPrinterService sunmiPrinterService;
-    private String pendingPrintText = null;
-    private String pendingPrintQr = null;
+    private Intent pendingIntent = null;
 
     private static final String DEFAULT_POS_URL = "https://sam7862002-svg.github.io/bakala/sunmi.html";
 
@@ -42,10 +41,9 @@ public class MainActivity extends AppCompatActivity {
                     statusTxt.setText("✅ SUNMI Printer Connected!");
                     statusTxt.setTextColor(Color.parseColor("#4ade80"));
                 }
-                if (pendingPrintText != null) {
-                    executeDirectPrint(pendingPrintText, pendingPrintQr);
-                    pendingPrintText = null;
-                    pendingPrintQr = null;
+                if (pendingIntent != null) {
+                    handlePrintIntent(pendingIntent);
+                    pendingIntent = null;
                 }
             });
         }
@@ -92,9 +90,9 @@ public class MainActivity extends AppCompatActivity {
         root.addView(btnOpenPos);
 
         TextView tagHeader = new TextView(this);
-        tagHeader.setText("\n🏷️ SHELF TAG & BARCODE PRINTER");
+        tagHeader.setText("\n🏷️ MANUAL SHELF TAG & BARCODE");
         tagHeader.setTextColor(Color.parseColor("#f97316"));
-        tagHeader.setTextSize(16);
+        tagHeader.setTextSize(15);
         tagHeader.setPadding(0, 24, 0, 12);
         root.addView(tagHeader);
 
@@ -117,7 +115,7 @@ public class MainActivity extends AppCompatActivity {
         root.addView(etCopies);
 
         Button btnPrintTag = new Button(this);
-        btnPrintTag.setText("🏷️ PRINT SHELF TAG (Name + VAT Price + Barcode)");
+        btnPrintTag.setText("🏷️ PRINT SHELF TAG");
         btnPrintTag.setBackgroundColor(Color.parseColor("#f97316"));
         btnPrintTag.setTextColor(Color.WHITE);
         btnPrintTag.setPadding(16, 24, 16, 24);
@@ -165,17 +163,39 @@ public class MainActivity extends AppCompatActivity {
     private void handlePrintIntent(Intent intent) {
         if (intent == null || intent.getData() == null) return;
         Uri uri = intent.getData();
-        if ("sampos".equals(uri.getScheme()) && "print".equals(uri.getHost())) {
+        if (!"sampos".equals(uri.getScheme())) return;
+
+        if (sunmiPrinterService == null) {
+            pendingIntent = intent;
+            return;
+        }
+
+        if ("print".equals(uri.getHost())) {
             String text = uri.getQueryParameter("text");
             String qr = uri.getQueryParameter("qr");
             if (text != null) {
-                if (sunmiPrinterService != null) {
-                    executeDirectPrint(text, qr);
+                executeDirectPrint(text, qr);
+            }
+        } else if ("tag".equals(uri.getHost())) {
+            String name = uri.getQueryParameter("name");
+            String price = uri.getQueryParameter("price");
+            String barcode = uri.getQueryParameter("barcode");
+            String code = uri.getQueryParameter("code");
+            String mode = uri.getQueryParameter("mode");
+            int copies = 1;
+            try { copies = Integer.parseInt(uri.getQueryParameter("copies")); } catch (Exception ignored) {}
+            if (copies < 1) copies = 1;
+
+            for (int i = 0; i < copies; i++) {
+                if ("barcode".equals(mode)) {
+                    printBarcode(name != null ? name : "", barcode != null ? barcode : "");
                 } else {
-                    pendingPrintText = text;
-                    pendingPrintQr = qr;
+                    printShelfTag(name != null ? name : "ITEM", price != null ? price : "0.00 SAR",
+                            barcode != null ? barcode : "", code != null ? code : "");
                 }
             }
+            Toast.makeText(this, "🖨️ Printed " + copies + " Tag(s)!", Toast.LENGTH_SHORT).show();
+            new Handler(Looper.getMainLooper()).postDelayed(this::openPosInChrome, 500);
         }
     }
 
@@ -191,7 +211,7 @@ public class MainActivity extends AppCompatActivity {
             }
             sunmiPrinterService.lineWrap(4, null);
             Toast.makeText(this, "🖨️ Bill Printed!", Toast.LENGTH_SHORT).show();
-            new Handler(Looper.getMainLooper()).postDelayed(this::openPosInChrome, 600);
+            new Handler(Looper.getMainLooper()).postDelayed(this::openPosInChrome, 500);
         } catch (RemoteException e) {
             e.printStackTrace();
         }
