@@ -4,6 +4,7 @@ import android.annotation.SuppressLint;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.os.RemoteException;
+import android.view.View;
 import android.webkit.ConsoleMessage;
 import android.webkit.JavascriptInterface;
 import android.webkit.PermissionRequest;
@@ -61,6 +62,7 @@ public class MainActivity extends AppCompatActivity {
         layout.addView(debugBar);
 
         webView = new WebView(this);
+        webView.setLayerType(View.LAYER_TYPE_SOFTWARE, null);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 0, 1.0f);
         webView.setLayoutParams(params);
@@ -93,7 +95,7 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void onPageFinished(WebView view, String url) {
-                debugBar.setText("Loaded: " + view.getTitle());
+                debugBar.setVisibility(View.GONE);
             }
         });
 
@@ -110,7 +112,10 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public boolean onConsoleMessage(ConsoleMessage cm) {
                 if (cm.messageLevel() == ConsoleMessage.MessageLevel.ERROR) {
-                    runOnUiThread(() -> debugBar.setText("JS Error (Line " + cm.lineNumber() + "): " + cm.message()));
+                    runOnUiThread(() -> {
+                        debugBar.setVisibility(View.VISIBLE);
+                        debugBar.setText("JS Error (Line " + cm.lineNumber() + "): " + cm.message());
+                    });
                 }
                 return true;
             }
