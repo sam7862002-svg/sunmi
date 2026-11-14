@@ -8,6 +8,8 @@ import android.os.RemoteException;
 import android.webkit.JavascriptInterface;
 import android.webkit.PermissionRequest;
 import android.webkit.WebChromeClient;
+import android.webkit.WebResourceError;
+import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -18,7 +20,6 @@ import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
 import com.sunmi.peripheral.printer.InnerPrinterCallback;
-import com.sunmi.peripheral.printer.InnerPrinterException;
 import com.sunmi.peripheral.printer.InnerPrinterManager;
 import com.sunmi.peripheral.printer.SunmiPrinterService;
 
@@ -47,40 +48,58 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.CAMERA}, 101);
-        }
+        try {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.CAMERA}, 101);
+            }
+        } catch (Throwable ignored) {}
 
         try {
             InnerPrinterManager.getInstance().bindService(this, innerPrinterCallback);
-        } catch (InnerPrinterException e) {
-            e.printStackTrace();
+        } catch (Throwable t) {
+            t.printStackTrace();
         }
 
-        webView = new WebView(this);
-        setContentView(webView);
+        try {
+            webView = new WebView(this);
+            setContentView(webView);
 
-        WebSettings settings = webView.getSettings();
-        settings.setJavaScriptEnabled(true);
-        settings.setDomStorageEnabled(true);
-        settings.setDatabaseEnabled(true);
-        settings.setAllowFileAccess(true);
-        settings.setAllowFileAccessFromFileURLs(true);
-        settings.setAllowUniversalAccessFromFileURLs(true);
-        settings.setMediaPlaybackRequiresUserGesture(false);
-        settings.setCacheMode(WebSettings.LOAD_DEFAULT);
+            WebSettings settings = webView.getSettings();
+            settings.setJavaScriptEnabled(true);
+            settings.setDomStorageEnabled(true);
+            settings.setDatabaseEnabled(true);
+            settings.setAllowFileAccess(true);
+            settings.setAllowFileAccessFromFileURLs(true);
+            settings.setAllowUniversalAccessFromFileURLs(true);
+            settings.setMediaPlaybackRequiresUserGesture(false);
+            settings.setCacheMode(WebSettings.LOAD_DEFAULT);
 
-        webView.addJavascriptInterface(new SunmiJsBridge(), "sunmiPrinter");
+            webView.addJavascriptInterface(new SunmiJsBridge(), "sunmiPrinter");
 
-        webView.setWebViewClient(new WebViewClient());
-        webView.setWebChromeClient(new WebChromeClient() {
-            @Override
-            public void onPermissionRequest(final PermissionRequest request) {
-                runOnUiThread(() -> request.grant(request.getResources()));
-            }
-        });
+            webView.setWebViewClient(new WebViewClient() {
+                @Override
+                public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+                    if (request != null && request.isForMainFrame()) {
+                        runOnUiThread(() -> Toast.makeText(MainActivity.this, "Page Error: " + error.getDescription(), Toast.LENGTH_LONG).show());
+                    }
+                }
+            });
 
-        webView.loadUrl(POS_URL);
+            webView.setWebChromeClient(new WebChromeClient() {
+                @Override
+                public void onPermissionRequest(final PermissionRequest request) {
+                    runOnUiThread(() -> {
+                        try {
+                            request.grant(request.getResources());
+                        } catch (Throwable ignored) {}
+                    });
+                }
+            });
+
+            webView.loadUrl(POS_URL);
+        } catch (Throwable e) {
+            Toast.makeText(this, "Startup Error: " + e.getMessage(), Toast.LENGTH_LONG).show();
+        }
     }
 
     public class SunmiJsBridge {
@@ -137,6 +156,6 @@ public class MainActivity extends AppCompatActivity {
         super.onDestroy();
         try {
             InnerPrinterManager.getInstance().unBindService(this, innerPrinterCallback);
-        } catch (Exception ignored) {}
+        } catch (Throwable ignored) {}
     }
 }
